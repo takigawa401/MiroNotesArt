@@ -5,12 +5,13 @@ from unittest.mock import Mock
 
 import pytest
 from PIL import Image
+from test_artifacts import mixed_plan
 
 from miro_sticky_art.api import APIError, UnknownResult
 from miro_sticky_art.config import Settings
 from miro_sticky_art.layout import build_notes
 from miro_sticky_art.runner import upload
-from miro_sticky_art.state import StateError, StateStore, make_plan
+from miro_sticky_art.state import StateError, StateStore, fingerprint, make_plan
 
 
 def plan_for(settings=None, board="board"):
@@ -124,3 +125,46 @@ def test_corrupt_state_is_rejected(tmp_path, damage):
     store.save()
     with pytest.raises(StateError):
         StateStore.load(store.path, plan_for())
+
+
+def test_gray_skip_plan_and_state_have_explicit_versions_and_sparse_records(tmp_path):
+    plan = mixed_plan()
+    assert plan["plan_version"] == 2
+    assert plan["skip_colors"] == ["gray"]
+    store = StateStore.create(tmp_path / "state.json", plan)
+    assert store.data["schema_version"] == 2
+    loaded = StateStore.load(store.path, plan)
+    assert [(note["row"], note["col"]) for note in loaded.data["notes"]] == [(0, 1), (1, 0)]
+    assert all(note["color"] != "gray" for note in loaded.data["plan"]["notes"])
+    assert "cells" not in loaded.data["plan"]
+    assert len(loaded.data["plan"]["notes"]) == 2
+
+
+@pytest.mark.parametrize("field,value", [("plan_version", 1), ("skip_colors", [])])
+def test_resume_checks_placement_version_and_skip_policy(tmp_path, field, value):
+    plan = mixed_plan()
+    store = StateStore.create(tmp_path / "state.json", plan)
+    changed = copy.deepcopy(plan)
+    changed[field] = value
+    with pytest.raises(StateError):
+        StateStore.load(store.path, changed)
+
+
+def test_legacy_state_requires_old_version_without_modifying_file(tmp_path, legacy_state):
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps(legacy_state), encoding="utf-8")
+    before = path.read_bytes()
+    with pytest.raises(StateError, match="旧形式.*旧バージョン"):
+        StateStore.load(path, mixed_plan())
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("field,value", [("plan_version", 1), ("skip_colors", [])])
+def test_invalid_plan_policy_rejected_even_with_matching_hash(tmp_path, field, value):
+    plan = mixed_plan()
+    store = StateStore.create(tmp_path / "state.json", plan)
+    store.data["plan"][field] = value
+    store.data["plan_sha256"] = fingerprint(store.data["plan"])
+    store.save()
+    with pytest.raises(StateError):
+        StateStore.load(store.path, store.data["plan"])

@@ -2,10 +2,11 @@
 
 from .api import APIError, UnknownResult
 from .layout import Note
-from .state import StateError, StateStore
+from .state import StateError, StateStore, validate_placement_plan
 
 
 def upload(store: StateStore, client, report=lambda message: None) -> None:
+    validate_placement_plan(store.data["plan"])
     unknown = store.unknown_records()
     if unknown:
         positions = ", ".join(f"({n['row']},{n['col']})" for n in unknown)
