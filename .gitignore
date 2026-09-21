@@ -1,0 +1,33 @@
+# 認証情報
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python / 開発ツール
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# ローカル画像・配置・実行記録（カスタム出力先も含む）
+images/*
+!images/.gitkeep
+output/
+preview.png
+layout.json
+state.json
+.run.lock
+*.tmp
+
+# OS
+Thumbs.db
+.DS_Store

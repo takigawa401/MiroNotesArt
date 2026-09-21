@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "miro-sticky-art"
+version = "0.1.0"
+description = "JPG画像をMiroの16色の付箋アートに変換するCLI"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["Pillow>=12.1.1,<13", "requests>=2.32.4,<3", "python-dotenv>=1.0,<2"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "ruff>=0.11,<1"]
+
+[project.scripts]
+miro-sticky-art = "miro_sticky_art.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["miro_sticky_art*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
