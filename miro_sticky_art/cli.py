@@ -91,6 +91,9 @@ def send_or_resolve(args, plan: dict, directory: Path, token: str, settings: Set
                 "確認結果を記録しました。API送信はありません。確認用オプションを外して再開してください。"
             )
             return
+        if not plan["notes"]:
+            print("作成対象は0枚です。プレビューと配置JSONを保存し、API送信なしで終了しました。")
+            return
         if not plan["board_id"] or not token:
             raise ValueError(
                 "送信には MIRO_ACCESS_TOKEN と --board-id または MIRO_BOARD_ID が必要です。"

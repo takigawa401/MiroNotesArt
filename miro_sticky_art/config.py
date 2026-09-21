@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from math import isfinite
 
 FLOAT_FIELDS = ("note_size", "gap", "origin_x", "origin_y", "interval", "timeout")
+# 付箋枚数とは別に、縮小・色変換・出力のローカル処理量を制限する。
+MAX_GRID_CELLS = 1_000_000
 
 
 @dataclass(frozen=True)

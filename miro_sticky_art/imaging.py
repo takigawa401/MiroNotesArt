@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from .config import Settings
+from .config import MAX_GRID_CELLS, Settings
 
 
 def grid_size(width: int, height: int, columns: int) -> tuple[int, int]:
@@ -41,11 +41,10 @@ def load_mosaic(path: Path, settings: Settings) -> tuple[Image.Image, dict]:
                     )
                     size = grid_size(*oriented_size, settings.columns)
                     count = size[0] * size[1]
-                    if count > settings.max_notes:
+                    if count > MAX_GRID_CELLS:
                         raise ValueError(
-                            f"付箋{count:,}枚は上限{settings.max_notes:,}枚を超えます。"
-                            "--columns を小さくしてください（例: --columns 20）。"
-                            "必要なら --max-notes で上限を変更できます。"
+                            f"処理用セル数{count:,}マスは上限{MAX_GRID_CELLS:,}マスを超えます。"
+                            "--columns を小さくしてください。付箋枚数上限とは別の制限です。"
                         )
                     rgb = ImageOps.exif_transpose(image).convert("RGB")
                     mosaic = rgb.resize(size, Image.Resampling.BOX)

@@ -64,6 +64,32 @@ def test_four_notes_in_row_major_order_with_correct_colors_and_positions():
     ]
 
 
+def test_gray_cells_leave_holes_without_changing_coordinates():
+    image = Image.new("RGB", (2, 2))
+    image.putdata([COLORS_BY_NAME[name].rgb for name in ("gray", "red", "blue", "gray")])
+    notes = build_notes(image, Settings(columns=2, note_size=20, gap=5, origin_x=-10, origin_y=7))
+    assert [(n.row, n.col, n.color, n.x, n.y) for n in notes] == [
+        (0, 1, "red", 15, 7),
+        (1, 0, "blue", -10, 32),
+    ]
+
+
+@pytest.mark.parametrize(
+    "names, expected_columns",
+    [
+        (("gray", "gray", "gray"), []),
+        (("red", "gray", "blue"), [0, 2]),
+        (("red", "blue", "yellow"), [0, 1, 2]),
+    ],
+)
+def test_gray_filter_preserves_original_column_numbers(names, expected_columns):
+    image = Image.new("RGB", (3, 1))
+    image.putdata([COLORS_BY_NAME[name].rgb for name in names])
+    notes = build_notes(image, Settings(columns=3))
+    assert [note.col for note in notes] == expected_columns
+    assert all(note.color != "gray" for note in notes)
+
+
 @pytest.mark.parametrize(
     "changes",
     [
@@ -85,16 +111,50 @@ def test_invalid_settings(changes):
         replace(Settings(), **changes).validate()
 
 
-def test_note_limit_checked_before_resize(tmp_path, monkeypatch):
-    path = tmp_path / "tall.jpg"
-    Image.new("RGB", (10, 100)).save(path)
+def test_total_cells_may_exceed_note_limit_when_gray_is_skipped(tmp_path):
+    path = tmp_path / "gray.jpg"
+    Image.new("RGB", (2, 2), COLORS_BY_NAME["gray"].rgb).save(path)
+    settings = Settings(columns=2, max_notes=1)
+    mosaic, _ = load_mosaic(path, settings)
+    assert mosaic.size == (2, 2)
+    assert build_notes(mosaic, settings) == []
+
+
+@pytest.mark.parametrize(
+    "names, allowed",
+    [
+        (("gray", "red", "blue", "gray"), True),
+        (("red", "red", "blue", "gray"), False),
+    ],
+)
+def test_note_limit_counts_only_non_gray_cells(names, allowed):
+    image = Image.new("RGB", (2, 2))
+    image.putdata([COLORS_BY_NAME[name].rgb for name in names])
+    settings = Settings(columns=2, max_notes=2)
+    if allowed:
+        assert len(build_notes(image, settings)) == 2
+    else:
+        with pytest.raises(ValueError, match="gray除外後.*3.*2.*--columns"):
+            build_notes(image, settings)
+
+
+def test_processing_cell_limit_checked_before_image_decode(tmp_path, monkeypatch):
+    path = tmp_path / "gray.jpg"
+    Image.new("RGB", (2, 2), "white").save(path)
 
     def forbidden(*args, **kwargs):
-        pytest.fail("枚数上限の超過は縮小処理の前に検出する")
+        pytest.fail("処理用セル数上限は画像展開より前に検査する")
 
-    monkeypatch.setattr(Image.Image, "resize", forbidden)
-    with pytest.raises(ValueError, match="--columns"):
-        load_mosaic(path, Settings(columns=40))
+    monkeypatch.setattr("miro_sticky_art.imaging.ImageOps.exif_transpose", forbidden)
+    with pytest.raises(ValueError, match="処理用セル数.*1,000,000.*--columns"):
+        load_mosaic(path, Settings(columns=1001, max_notes=2_000_000))
+
+
+def test_processing_cell_limit_allows_exact_boundary(tmp_path):
+    path = tmp_path / "gray.jpg"
+    Image.new("RGB", (2, 2), "white").save(path)
+    mosaic, _ = load_mosaic(path, Settings(columns=1000, max_notes=1))
+    assert mosaic.size == (1000, 1000)
 
 
 @pytest.mark.parametrize(

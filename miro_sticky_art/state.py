@@ -9,8 +9,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .config import Settings
-from .layout import Note
+from .layout import SKIP_COLORS, Note
 from .palette import PALETTE
+
+PLAN_VERSION = 2
+STATE_VERSION = 2
 
 
 class StateError(RuntimeError):
@@ -60,6 +63,8 @@ def make_plan(
     rows: int,
 ) -> dict:
     return {
+        "plan_version": PLAN_VERSION,
+        "skip_colors": list(SKIP_COLORS),
         "conversion": "srgb-d65-box-de76-v1",
         "image": {key: image[key] for key in ("sha256", "bytes", "original_size", "oriented_size")},
         "settings": asdict(settings),
@@ -69,6 +74,17 @@ def make_plan(
         "palette": [asdict(color) for color in PALETTE],
         "notes": [asdict(note) for note in notes],
     }
+
+
+def validate_placement_plan(plan: dict) -> None:
+    if plan.get("plan_version") != PLAN_VERSION:
+        raise StateError(
+            "配置計画の形式がgray除外版と一致しません。READMEの再開手順を確認してください。"
+        )
+    if plan.get("skip_colors") != list(SKIP_COLORS):
+        raise StateError("配置計画のgray除外方針が一致しません。API送信を中止しました。")
+    if any(note["color"] in SKIP_COLORS for note in plan["notes"]):
+        raise StateError("送信計画に除外対象のgrayが含まれています。API送信を中止しました。")
 
 
 class StateStore:
@@ -81,7 +97,7 @@ class StateStore:
         if path.exists():
             raise StateError("状態ファイルが既にあります。--resume で再開してください。")
         data = {
-            "schema_version": 1,
+            "schema_version": STATE_VERSION,
             "created_at": utc_now(),
             "updated_at": utc_now(),
             "plan": plan,
@@ -106,8 +122,17 @@ class StateStore:
     def load(cls, path: Path, expected_plan: dict):
         try:
             data = json.loads(Path(path).read_text(encoding="utf-8"))
-            if data["schema_version"] != 1 or data["plan_sha256"] != fingerprint(data["plan"]):
+            if data["schema_version"] == 1:
+                raise StateError(
+                    "旧形式のstate.jsonはこの版では再開できません。"
+                    "旧バージョン（9c7aae9）で再開してください。READMEに手順があります。"
+                )
+            if data["schema_version"] != STATE_VERSION or data["plan_sha256"] != fingerprint(
+                data["plan"]
+            ):
                 raise StateError("状態ファイルのバージョンまたは整合性が不正です。")
+            validate_placement_plan(data["plan"])
+            validate_placement_plan(expected_plan)
             if data["plan_sha256"] != fingerprint(expected_plan):
                 raise StateError(
                     "画像・設定・ボードID・変換結果が前回と一致しません。元の条件で再開してください。"
